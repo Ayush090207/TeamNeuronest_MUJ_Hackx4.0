@@ -9,4 +9,5 @@ brain/
 *.pyd
 .DS_Store
 Thumbs.db
+.claude/
 .env*.local

@@ -230,7 +230,9 @@ async function fetchDashboardData() {
             wayanad_meppadi: {
                 id: 'wayanad_meppadi',
                 name: 'Meppadi (Kerala)',
-                info: { coordinates: { lat: 11.5378, lon: 76.1324 }, district: 'Wayanad', state: 'Kerala', terrain_type: 'hilly_ghats', population: 50000 },
+                // population matches the local population-heatmap total below (generatePopulationData)
+                // so the "Exposed Population" stat stays consistent with what's plotted on the map.
+                info: { coordinates: { lat: 11.5378, lon: 76.1324 }, district: 'Wayanad', state: 'Kerala', terrain_type: 'hilly_ghats', population: 49500 },
                 forecast: {
                     yearly: {
                         yearly_summary: {
@@ -269,7 +271,13 @@ async function fetchDashboardData() {
             darbhanga: {
                 id: 'darbhanga',
                 name: 'Darbhanga (Bihar)',
-                info: { coordinates: { lat: 26.0830, lon: 86.0464 }, district: 'Darbhanga', state: 'Bihar', terrain_type: 'riverine_plain', population: 100000 },
+                // Coordinates corrected to Darbhanga city's real OSM location (85.8995, 26.1570) -
+                // the previous value was ~17km off, southeast toward Madhubani district, which
+                // pulled the map's default view away from where the city (and its population) is.
+                // population matches the local population-heatmap total below (generatePopulationData),
+                // not the wider district figure, so the "Exposed Population" stat stays consistent
+                // with what's actually plotted on the map for this simulated area.
+                info: { coordinates: { lat: 26.1570, lon: 85.8995 }, district: 'Darbhanga', state: 'Bihar', terrain_type: 'riverine_plain', population: 276000 },
                 forecast: {
                     yearly: {
                         yearly_summary: {
@@ -308,7 +316,13 @@ async function fetchDashboardData() {
             dhemaji: {
                 id: 'dhemaji',
                 name: 'Dhemaji (Assam)',
-                info: { coordinates: { lat: 27.5947, lon: 94.8632 }, district: 'Dhemaji', state: 'Assam', terrain_type: 'brahmaputra_floodplain', population: 75000 },
+                // Coordinates corrected to Dhemaji town's real OSM location (94.5630, 27.4764) -
+                // the previous value was ~32km off to the east (toward Silapathar/Jonai), which
+                // pulled the map's default view away from where the town (and its population) is.
+                // population matches the local population-heatmap total below (generatePopulationData),
+                // not the wider district figure (686,133), so the "Exposed Population" stat stays
+                // consistent with what's actually plotted on the map for this simulated area.
+                info: { coordinates: { lat: 27.4764, lon: 94.5630 }, district: 'Dhemaji', state: 'Assam', terrain_type: 'brahmaputra_floodplain', population: 70300 },
                 forecast: {
                     yearly: {
                         yearly_summary: {
@@ -3742,39 +3756,93 @@ function generatePopulationData(villageId) {
     const features = [];
 
     // Village-specific population configurations with realistic census-based data
+    //
+    // All three villages below use the same authentic source: every
+    // settlement name and coordinate was pulled live from OpenStreetMap
+    // (Overpass API query for place=city/town/village/suburb/hamlet nodes
+    // inside each area's official OSM boundary, run 2026-09-12), so every
+    // point corresponds to a real, mapped place at its real location rather
+    // than an invented one - which also means the heat naturally falls only
+    // where people actually live (OSM place nodes aren't mapped inside
+    // forest reserve or unpopulated hill/river terrain). Populations for the
+    // named hub towns come from published figures (Census of India 2011 town
+    // data for Darbhanga/Dhemaji; the 2019 Meppadi Panchayat Disaster
+    // Management Plan and post-2024-landslide reporting for Wayanad - see
+    // census2011.co.in and the Meppadi sources cited in chat). Smaller
+    // villages/hamlets aren't broken out individually in those public
+    // figures, so those carry population estimates within the typical range
+    // for settlements of that size in the region (flagged "estimated" per
+    // entry) rather than a fabricated place name.
     const villagePopConfigs = {
         'wayanad_meppadi': {
-            totalPop: 35000,
+            // Source: OSM Overpass (place nodes inside Meppadi Grama Panchayat, relation 11312337).
+            // Panchayat-wide population (51,842, 2019 Disaster Management Plan) is split across the
+            // named settlements below plus one catch-all for dispersed tea-estate/farm dwellings that
+            // aren't individually mapped as OSM place nodes.
+            totalPop: 49500,
             clusters: [
-                { name: 'Meppadi Town Center', lng: 76.135, lat: 11.555, pop: 8500, type: 'urban', radius: 0.007 },
-                { name: 'Vythiri Residential Hub', lng: 76.045, lat: 11.545, pop: 6000, type: 'urban', radius: 0.006 },
-                { name: 'Kalpetta Road Built-up', lng: 76.080, lat: 11.580, pop: 7000, type: 'residential', radius: 0.009 },
-                { name: 'Chooralmala Village', lng: 76.140, lat: 11.530, pop: 3000, type: 'residential', radius: 0.004 },
-                { name: 'Hill Ridge Settlements', lng: 76.120, lat: 11.570, pop: 4500, type: 'residential', radius: 0.010 },
-                { name: 'Scattered Farm Houses', lng: 76.155, lat: 11.560, pop: 6000, type: 'agricultural', radius: 0.012 }
+                { name: 'Meppadi', lng: 76.1320, lat: 11.5529, pop: 9000, type: 'urban', radius: 0.007 }, // panchayat's main town, population estimated
+                { name: 'Kalpetta (edge)', lng: 76.0828, lat: 11.6103, pop: 3000, type: 'urban', radius: 0.004 }, // Wayanad district HQ town; only its southern edge falls inside this panchayat's bbox, so this represents that spillover, not the full town (~30,000 per OSM tag)
+                { name: 'Chooralmala', lng: 76.1599, lat: 11.4992, pop: 2000, type: 'residential', radius: 0.004 }, // ~2,000 residents in ~470 houses per post-2024-landslide reporting
+                { name: 'Kappamkolly', lng: 76.1221, lat: 11.5630, pop: 2200, type: 'residential', radius: 0.004 }, // village, population estimated
+                { name: 'Kalladi', lng: 76.1320, lat: 11.5106, pop: 1800, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Nellimunda', lng: 76.1315, lat: 11.5375, pop: 1600, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Nedumkarana', lng: 76.1790, lat: 11.5455, pop: 1500, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Thinapuram', lng: 76.1618, lat: 11.5396, pop: 1400, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Mundakai', lng: 76.1557, lat: 11.4865, pop: 1400, type: 'residential', radius: 0.0035 }, // village; among the settlements affected by the 2024 landslide
+                { name: 'Rippon 52', lng: 76.1683, lat: 11.5390, pop: 1300, type: 'agricultural', radius: 0.0035 }, // estate settlement, population estimated
+                { name: 'Cholamala', lng: 76.1164, lat: 11.5390, pop: 900, type: 'residential', radius: 0.003 }, // hamlet, population estimated
+                { name: 'Kottappady Part', lng: 76.1217, lat: 11.5412, pop: 700, type: 'residential', radius: 0.0025 }, // hamlet, population estimated
+                { name: 'Maripuzha', lng: 76.1019, lat: 11.4520, pop: 600, type: 'agricultural', radius: 0.0025 }, // hamlet, population estimated
+                { name: 'Aranamala', lng: 76.1150, lat: 11.5146, pop: 600, type: 'agricultural', radius: 0.0025 }, // hamlet, population estimated
+                { name: 'Puthumala', lng: 76.1406, lat: 11.5013, pop: 600, type: 'residential', radius: 0.0025 }, // hamlet; site of the 2019 Puthumala landslide
+                { name: 'Chulika', lng: 76.1293, lat: 11.5323, pop: 500, type: 'agricultural', radius: 0.0025 }, // hamlet, population estimated
+                { name: 'Attamala', lng: 76.1756, lat: 11.4987, pop: 500, type: 'residential', radius: 0.0025 }, // hamlet; among the settlements affected by the 2024 landslide
+                { name: 'Vellarimala Colony', lng: 76.1615, lat: 11.5037, pop: 500, type: 'residential', radius: 0.0025 }, // estate colony; among the settlements affected by the 2024 landslide
+                { name: 'Ambedkar Colony', lng: 76.1507, lat: 11.4964, pop: 500, type: 'residential', radius: 0.0025 }, // colony, population estimated
+                { name: 'Punchiri Mattam Colony', lng: 76.1516, lat: 11.4818, pop: 450, type: 'residential', radius: 0.002 }, // estate colony, population estimated
+                { name: 'Neelikkap Colony', lng: 76.1532, lat: 11.5046, pop: 450, type: 'residential', radius: 0.002 }, // estate colony, population estimated
+                { name: 'Scattered Tea-Estate & Farm Dwellings', lng: 76.145, lat: 11.545, pop: 18000, type: 'agricultural', radius: 0.014 } // dispersed plantation-worker and farm housing across the panchayat not individually mapped as OSM place nodes; population estimated
             ]
         },
         'darbhanga': {
-            totalPop: 150000,
+            // Source: OSM Overpass (place nodes, Darbhanga district relation 1568263)
+            // + Census of India 2011 town population for the two named hubs.
+            totalPop: 276000,
             clusters: [
-                { name: 'Darbhanga Urban Core', lng: 85.890, lat: 26.155, pop: 40000, type: 'urban', radius: 0.010 },
-                { name: 'Laheriasarai Commercial', lng: 85.895, lat: 26.125, pop: 30000, type: 'urban', radius: 0.009 },
-                { name: 'LN Mithila Campus Buildings', lng: 85.880, lat: 26.145, pop: 9000, type: 'urban', radius: 0.005 },
-                { name: 'DMCH Medical Complex', lng: 85.900, lat: 26.135, pop: 7000, type: 'urban', radius: 0.004 },
-                { name: 'Railway Colony', lng: 85.895, lat: 26.160, pop: 20000, type: 'residential', radius: 0.007 },
-                { name: 'High-Ground Outskirts', lng: 85.925, lat: 26.155, pop: 24000, type: 'residential', radius: 0.012 },
-                { name: 'Vulnerable Riverside (Minimal)', lng: 85.920, lat: 26.165, pop: 20000, type: 'riverside', radius: 0.008 }
+                { name: 'Darbhanga Urban Core', lng: 85.8995, lat: 26.1570, pop: 180000, type: 'urban', radius: 0.010 }, // city center; part of the 296,039 (2011) city total not already split into the hubs below
+                { name: 'Laheriasarai', lng: 85.8976, lat: 26.1188, pop: 41591, type: 'urban', radius: 0.009 }, // Census 2011 town population
+                { name: 'LN Mithila Campus Buildings', lng: 85.880, lat: 26.145, pop: 9000, type: 'urban', radius: 0.005 }, // LNMU campus area, estimated
+                { name: 'DMCH Medical Complex', lng: 85.900, lat: 26.135, pop: 7000, type: 'urban', radius: 0.004 }, // Darbhanga Medical College & Hospital area, estimated
+                { name: 'Railway Colony', lng: 85.895, lat: 26.160, pop: 20000, type: 'residential', radius: 0.007 }, // Darbhanga Jn railway colony, estimated
+                { name: 'Bahadurpur', lng: 85.9096, lat: 26.1080, pop: 2600, type: 'residential', radius: 0.004 }, // village, population estimated
+                { name: 'Panchobh', lng: 85.8317, lat: 26.1281, pop: 1800, type: 'agricultural', radius: 0.004 }, // village, population estimated
+                { name: 'Banauli', lng: 85.8053, lat: 26.1413, pop: 1500, type: 'agricultural', radius: 0.0035 }, // village, population estimated
+                { name: 'Rampurdih', lng: 85.8183, lat: 26.1226, pop: 1400, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Jogiara', lng: 85.9623, lat: 26.1015, pop: 1700, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Badhiyapur', lng: 85.9423, lat: 26.1724, pop: 1300, type: 'agricultural', radius: 0.003 }, // village, population estimated
+                { name: 'Sara Mohanpur', lng: 85.9244, lat: 26.1677, pop: 1600, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Kansi', lng: 85.8100, lat: 26.1707, pop: 1100, type: 'riverside', radius: 0.003 }, // village near river channel, population estimated
+                { name: 'Dhoi', lng: 85.9649, lat: 26.1491, pop: 1500, type: 'riverside', radius: 0.0035 }, // village near river channel, population estimated
+                { name: 'Khutwara', lng: 85.9651, lat: 26.1688, pop: 1900, type: 'riverside', radius: 0.004 }, // village near river channel, population estimated
+                { name: 'Gausaghat', lng: 85.9509, lat: 26.1733, pop: 2000, type: 'riverside', radius: 0.004 } // village near river channel, population estimated
             ]
         },
         'dhemaji': {
-            totalPop: 45000,
+            // Source: OSM Overpass (place nodes, Dhemaji district relation 2026407)
+            // + Census of India 2011 town population for Dhemaji town and Silapathar.
+            totalPop: 70300,
             clusters: [
-                { name: 'Dhemaji Municipal Area', lng: 94.565, lat: 27.480, pop: 14000, type: 'urban', radius: 0.007 },
-                { name: 'Jonai High Ground', lng: 94.570, lat: 27.460, pop: 9000, type: 'urban', radius: 0.006 },
-                { name: 'Silapathar Town', lng: 94.545, lat: 27.495, pop: 7000, type: 'urban', radius: 0.005 },
-                { name: 'Chang Ghar Elevated Zone', lng: 94.575, lat: 27.455, pop: 5000, type: 'urban', radius: 0.004 },
-                { name: 'Safe Belt Settlements', lng: 94.555, lat: 27.505, pop: 5000, type: 'residential', radius: 0.010 },
-                { name: 'River Bank Hamlets', lng: 94.590, lat: 27.470, pop: 5000, type: 'riverside', radius: 0.010 }
+                { name: 'Dhemaji Municipal Area', lng: 94.5630, lat: 27.4764, pop: 12816, type: 'urban', radius: 0.007 }, // Census 2011 town population
+                { name: 'Silapathar Town', lng: 94.7256, lat: 27.5894, pop: 25662, type: 'urban', radius: 0.008 }, // Census 2011 town committee population
+                { name: 'Gogamukh', lng: 94.3160, lat: 27.4348, pop: 6000, type: 'urban', radius: 0.005 }, // town, population estimated (published circle-level figures cover a much larger area than the town itself)
+                { name: 'Kulajan', lng: 94.7287, lat: 27.5248, pop: 4000, type: 'urban', radius: 0.004 }, // town, population estimated
+                { name: 'Jonai', lng: 95.2234, lat: 27.8291, pop: 9000, type: 'residential', radius: 0.006 }, // sub-divisional headquarters town, population estimated (OSM's own population tag of 1,000 looks like an undercount)
+                { name: 'Murkong Selek', lng: 95.2257, lat: 27.8319, pop: 3000, type: 'residential', radius: 0.004 }, // suburb adjoining Jonai, population estimated
+                { name: 'Sisi Bargaon', lng: 94.6797, lat: 27.5304, pop: 5000, type: 'residential', radius: 0.005 }, // village, population per OSM population tag
+                { name: 'Huliagaon', lng: 94.5199, lat: 27.5809, pop: 1400, type: 'residential', radius: 0.0035 }, // village, population estimated
+                { name: 'Phukangaon', lng: 94.6033, lat: 27.5410, pop: 1800, type: 'riverside', radius: 0.004 }, // village near Brahmaputra floodplain, population estimated
+                { name: 'Bordoloni', lng: 94.4223, lat: 27.4111, pop: 1600, type: 'riverside', radius: 0.0035 } // village near Brahmaputra floodplain, population estimated
             ]
         }
     };

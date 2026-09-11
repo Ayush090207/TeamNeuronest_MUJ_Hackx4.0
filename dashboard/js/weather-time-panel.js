@@ -2,9 +2,10 @@
  * Jal Drishti - Weather & Time Control Panel
  * ---------------------------------------------------------------
  * Frontend-only addition. Renders:
- *   - The "CURRENT CONDITIONS" card in the left panel (always shows
- *     real current weather; never changes when the timeline below
- *     is scrubbed).
+ *   - The "CURRENT CONDITIONS" card in the left panel. It tracks
+ *     whichever day + hour is selected below (defaulting to today/now
+ *     on load) rather than always showing the real current moment -
+ *     see updateCurrentConditionsForSelection().
  *   - The day selector + hourly timeline in the bottom panel.
  *
  * It drives the EXISTING flood simulation state (appState.currentTimeStep)
@@ -43,27 +44,6 @@
     const FORECAST_DAYS = 7;
     const SIM_BUCKETS = [0, 4, 8, 12, 16, 20, 24]; // matches TIME_STEPS in enhanced.js
 
-    const WMO_ICONS = {
-        0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️',
-        45: '🌫️', 48: '🌫️',
-        51: '🌦️', 53: '🌦️', 55: '🌧️',
-        61: '🌧️', 63: '🌧️', 65: '⛈️',
-        71: '🌨️', 73: '🌨️', 75: '❄️',
-        80: '🌧️', 81: '🌧️', 82: '⛈️',
-        95: '⚡', 96: '⛈️', 99: '⛈️'
-    };
-    const WMO_DESC = {
-        0: 'Clear Sky', 1: 'Mainly Clear', 2: 'Partly Cloudy', 3: 'Overcast',
-        45: 'Foggy', 48: 'Rime Fog',
-        51: 'Light Drizzle', 53: 'Drizzle', 55: 'Dense Drizzle',
-        61: 'Light Rain', 63: 'Moderate Rain', 65: 'Heavy Rain',
-        71: 'Light Snow', 73: 'Snow', 75: 'Heavy Snow',
-        80: 'Rain Showers', 81: 'Showers', 82: 'Heavy Showers',
-        95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Severe Thunderstorm'
-    };
-
-    function iconForCode(code) { return WMO_ICONS[code] || '⛅'; }
-    function descForCode(code) { return WMO_DESC[code] || 'Partly Cloudy'; }
     function iconForRain(mm) {
         if (mm >= 25) return '⛈️';
         if (mm >= 10) return '🌧️';
@@ -184,6 +164,14 @@
         return days; // [{date, rainSum, hours: number[24]}]
     }
 
+    function descForRain(rain) {
+        if (rain >= 25) return 'Heavy Thunderstorm';
+        if (rain >= 10) return 'Heavy Rain';
+        if (rain >= 2) return 'Rain Showers';
+        if (rain > 0) return 'Light Drizzle';
+        return 'Partly Cloudy';
+    }
+
     function buildSyntheticWeather(villageId) {
         const village = appState.data?.villages?.[villageId];
         const liveDefaults = village?.stats?.live_data?.weather?.current || { temperature: 26, humidity: 75, windspeed: 10 };
@@ -197,7 +185,11 @@
                 hour: h,
                 rain,
                 icon: iconForRain(rain),
-                temp: Math.round((liveDefaults.temperature || 26) + Math.sin((h / 24) * Math.PI * 2) * 3)
+                desc: descForRain(rain),
+                temp: Math.round((liveDefaults.temperature || 26) + Math.sin((h / 24) * Math.PI * 2) * 3),
+                // Humidity climbs and wind gusts a little during heavier bursts - monsoon realism.
+                humidity: Math.min(99, Math.round((liveDefaults.humidity ?? 75) + rain * 0.6)),
+                wind: Math.round((liveDefaults.windspeed ?? 10) + Math.min(15, rain * 0.3))
             }));
             return {
                 date: rd.date,
@@ -209,20 +201,7 @@
             };
         });
 
-        const currentHourData = days[0].hours[now.getHours()] || { rain: 0 };
-
-        return {
-            isSynthetic: true,
-            current: {
-                temp: liveDefaults.temperature ?? 26,
-                humidity: liveDefaults.humidity ?? 75,
-                wind: liveDefaults.windspeed ?? 10,
-                rain: currentHourData.rain,
-                icon: iconForRain(currentHourData.rain),
-                desc: currentHourData.rain > 2 ? 'Rain Showers' : 'Partly Cloudy'
-            },
-            days
-        };
+        return { isSynthetic: true, days };
     }
 
     // ------------------------------------------------------------
@@ -241,8 +220,7 @@
 
         try {
             const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-                `&current_weather=true` +
-                `&hourly=temperature_2m,weathercode,relativehumidity_2m` +
+                `&hourly=temperature_2m,relativehumidity_2m,windspeed_10m` +
                 `&forecast_days=${FORECAST_DAYS}&timezone=auto`;
 
             const res = await fetch(url, { signal: controller.signal });
@@ -251,14 +229,21 @@
             if (!data.hourly) throw new Error('Incomplete weather payload');
 
             const hourly = data.hourly;
-            const now = new Date();
             const rainDays = generateMonsoonRainfall(villageId);
 
             const days = rainDays.map((rd, d) => {
                 const date = new Date(rd.date + 'T00:00:00');
                 const hours = rd.hours.map((rain, h) => {
                     const idx = d * 24 + h;
-                    return { hour: h, rain, icon: iconForRain(rain), temp: Math.round(hourly.temperature_2m?.[idx] ?? 0) };
+                    return {
+                        hour: h,
+                        rain,
+                        icon: iconForRain(rain),
+                        desc: descForRain(rain),
+                        temp: Math.round(hourly.temperature_2m?.[idx] ?? 0),
+                        humidity: Math.round(hourly.relativehumidity_2m?.[idx] ?? 0),
+                        wind: Math.round(hourly.windspeed_10m?.[idx] ?? 0)
+                    };
                 });
                 return {
                     date: rd.date,
@@ -270,23 +255,7 @@
                 };
             });
 
-            const nowPrefix = `${dateKey(now)}T${pad2(now.getHours())}`;
-            const nowIdx = Array.isArray(hourly.time) ? hourly.time.findIndex(t => t.startsWith(nowPrefix)) : -1;
-            const cw = data.current_weather || {};
-            const currentRain = days[0]?.hours?.[now.getHours()]?.rain ?? 0;
-
-            return {
-                isSynthetic: false,
-                current: {
-                    temp: cw.temperature ?? (nowIdx >= 0 ? hourly.temperature_2m?.[nowIdx] : 0),
-                    humidity: nowIdx >= 0 ? (hourly.relativehumidity_2m?.[nowIdx] ?? '--') : '--',
-                    wind: cw.windspeed ?? 0,
-                    rain: currentRain,
-                    icon: iconForRain(currentRain),
-                    desc: currentRain > 2 ? 'Rain Showers' : descForCode(cw.weathercode ?? 0)
-                },
-                days
-            };
+            return { isSynthetic: false, days };
         } finally {
             clearTimeout(timeout);
         }
@@ -375,6 +344,7 @@
         state.selectedHour = target.hour;
         renderDaySelector();
         renderHourlyTimeline();
+        updateCurrentConditionsForSelection();
     };
 
     function buildBucketMap() {
@@ -406,13 +376,35 @@
         setText('weatherHum', `${c.humidity}%`);
         setText('weatherWind', `${Math.round(c.wind)} km/h`);
 
+        // Labels the moment being shown (e.g. "TODAY 23:00" or "MON 07:00")
+        // instead of the real wall-clock time, since this card now tracks
+        // whatever day/hour is selected rather than always "right now".
         const updatedEl = document.getElementById('weatherUpdatedAt');
         if (updatedEl) {
-            updatedEl.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const day = state.days[state.selectedDayIndex];
+            updatedEl.textContent = day ? `${day.dayName} ${pad2(state.selectedHour)}:00` : '--:--';
         }
 
         const rainRow = document.getElementById('weatherRainRow');
         if (rainRow) rainRow.classList.toggle('rain-alert', c.rain >= 10);
+    }
+
+    // Pulls Current Conditions from whichever hour is currently selected
+    // (falls back to synthetic data automatically, since state.days is
+    // already built from the live-or-synthetic source at load time).
+    function updateCurrentConditionsForSelection() {
+        const day = state.days[state.selectedDayIndex];
+        const hourData = day?.hours?.[state.selectedHour];
+        if (!hourData) return;
+        state.current = {
+            temp: hourData.temp,
+            humidity: hourData.humidity,
+            wind: hourData.wind,
+            rain: hourData.rain,
+            icon: hourData.icon,
+            desc: hourData.desc
+        };
+        renderCurrentConditions();
     }
 
     function renderDaySelector() {
@@ -487,6 +479,7 @@
         }
         renderDaySelector();
         renderHourlyTimeline();
+        updateCurrentConditionsForSelection();
         applySimulationForSelection();
     }
 
@@ -494,6 +487,7 @@
         if (hour === state.selectedHour) return;
         state.selectedHour = hour;
         renderHourlyTimeline();
+        updateCurrentConditionsForSelection();
         applySimulationForSelection();
     }
 
@@ -522,13 +516,12 @@
         if (state.villageId !== villageId) return;
 
         state.days = payload.days;
-        state.current = payload.current;
         state.isSynthetic = payload.isSynthetic;
         state.selectedDayIndex = 0; // TODAY is always first
         state.selectedHour = state.nowHour;
 
         buildBucketMap();
-        renderCurrentConditions();
+        updateCurrentConditionsForSelection();
         renderDaySelector();
         renderHourlyTimeline();
         applySimulationForSelection();
@@ -552,6 +545,30 @@
         });
     }
     bindForecastToggle();
+
+    // ------------------------------------------------------------
+    // Map Layers focus mode - clicking any layer control (rescue path /
+    // flood risk grid / population heatmap) fades out everything except
+    // the Map Layers panel and the map, so the layer just activated can
+    // be read against the full screen. ".focus-exit-btn" (in the Map
+    // Layers panel header) brings the rest of the dashboard back.
+    // Purely additive: these listeners run alongside each button's
+    // existing onclick handler in enhanced.js, untouched.
+    // ------------------------------------------------------------
+    function bindMapLayersFocusMode() {
+        const hudContainer = document.querySelector('.hud-container');
+        const exitBtn = document.getElementById('exitFocusModeBtn');
+        if (!hudContainer) return;
+
+        const enterFocusMode = () => hudContainer.classList.add('focus-mode');
+        const exitFocusMode = () => hudContainer.classList.remove('focus-mode');
+
+        ['btnFindRescue', 'btnLayerRisk', 'btnLayerPopHeatmap'].forEach(id => {
+            document.getElementById(id)?.addEventListener('click', enterFocusMode);
+        });
+        exitBtn?.addEventListener('click', exitFocusMode);
+    }
+    bindMapLayersFocusMode();
 
     // Keep the Live Forecast button's height matched to the (always-visible)
     // flood-simulation block next to it, so the two line up exactly.

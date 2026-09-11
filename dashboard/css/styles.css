@@ -281,6 +281,58 @@ body {
     pointer-events: auto;
 }
 
+/* ============================================
+   Map Layers Focus Mode
+   Activated by clicking a layer control (Find Best Rescue Path / Flood
+   Risk Grid / Population Heatmap): everything except the Map Layers
+   panel and the map itself fades out of the way, so the layer just
+   switched on can be read/used against the full screen. The header
+   button lets the user bring the rest of the dashboard back.
+   ============================================ */
+.hud-left,
+.hud-bottom {
+    transition: opacity 0.4s var(--transition-smooth), transform 0.4s var(--transition-smooth);
+}
+
+.hud-container.focus-mode .hud-left {
+    opacity: 0;
+    transform: translateX(-24px);
+    pointer-events: none;
+}
+
+.hud-container.focus-mode .hud-bottom {
+    opacity: 0;
+    transform: translateY(24px);
+    pointer-events: none;
+}
+
+.focus-exit-btn {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-secondary);
+    font-family: var(--font-tech);
+    font-size: 0.6rem;
+    letter-spacing: 0.5px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s var(--transition-smooth);
+}
+
+.focus-exit-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+    background: rgba(59, 130, 246, 0.12);
+}
+
+.hud-container.focus-mode .focus-exit-btn {
+    display: inline-flex;
+}
+
 .glass-panel {
     background: var(--bg-glass);
     backdrop-filter: blur(20px);

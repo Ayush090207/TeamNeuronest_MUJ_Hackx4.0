@@ -13,7 +13,7 @@
         href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;600&display=swap"
         rel="stylesheet">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="css/styles.css?v=3.9">
+    <link rel="stylesheet" href="css/styles.css?v=4.0">
 </head>
 
 <body>
@@ -89,6 +89,64 @@
                         <span class="weather-stat-value" id="weatherWind">-- km/h</span>
                         <span class="weather-stat-label">Wind</span>
                     </div>
+                </div>
+            </div>
+
+            <!-- Resource Allocation Panel -->
+            <div class="glass-panel" id="resourceAllocationPanel"
+                style="border-left: 3px solid var(--accent-tertiary);">
+                <div class="panel-header">
+                    <span style="display:flex; align-items:center; gap:8px;">
+                        <span class="layer-icon">🎯</span> RESOURCE ALLOCATION
+                    </span>
+                    <span class="model-version">PRIORITY-RANKED</span>
+                </div>
+
+                <div class="resource-stats-grid" id="resource-coverage">
+                    <!-- Populated by JS -->
+                </div>
+
+                <div class="mission-control-section" style="margin-top:16px;">
+                    <div class="label-tiny" style="color:var(--accent-primary); letter-spacing:1px; margin-bottom:8px;">
+                        ACTIVE DEPLOYMENT SCHEDULE</div>
+                    <div id="deployment-missions" class="scroll-container"
+                        style="max-height:220px; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:8px; padding:5px;">
+                        <!-- Mission cards / solver progress populated by JS -->
+                        <div style="text-align:center; padding:18px 10px; color:var(--text-muted); font-size:0.65rem; line-height:1.5;">
+                            Ranks rescue assets against flood-exposed zones by population,
+                            severity, model confidence and travel time.<br>Requires an active
+                            rainfall simulation.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="optimization-controls" style="display:flex; gap:8px; margin-top:12px;">
+                    <button id="btnStartOptimization" class="action-btn"
+                        style="flex:1; background:linear-gradient(135deg, rgba(139, 92, 246, 0.4) 0%, rgba(139, 92, 246, 0.2) 100%); border-color:rgba(139, 92, 246, 0.5);"
+                        onclick="optimizeAllocation()">
+                        ⚡ START OPTIMIZATION
+                    </button>
+                    <button id="btnStopOptimization" class="action-btn"
+                        style="flex:1; display:none; background:linear-gradient(135deg, rgba(239, 68, 68, 0.4) 0%, rgba(239, 68, 68, 0.2) 100%); border-color:rgba(239, 68, 68, 0.5); color:#fca5a5;"
+                        onclick="stopOptimization()">
+                        🛑 STOP
+                    </button>
+                </div>
+
+                <!-- Deployment Report Download -->
+                <button id="btnDownloadDeploymentReport" class="action-btn"
+                    style="width:100%; margin-top:8px; background:linear-gradient(135deg, rgba(34, 211, 238, 0.3) 0%, rgba(59, 130, 246, 0.2) 100%); border-color:rgba(34, 211, 238, 0.4);"
+                    onclick="generateDeploymentReport()">
+                    📋 DOWNLOAD DEPLOYMENT REPORT
+                </button>
+
+                <!-- Phase Summary -->
+                <div id="deployment-phase-summary" style="display:flex; flex-direction:column; gap:4px; margin-top:12px;">
+                    <!-- Populated by JS after optimization -->
+                </div>
+
+                <div id="deployment-recommendations" style="margin-top:12px;">
+                    <!-- Alerts populated by JS -->
                 </div>
             </div>
         </div>
@@ -291,7 +349,7 @@
         }
     </style>
 
-    <script src="js/enhanced.js?v=3.5"></script>
+    <script src="js/enhanced.js?v=3.6"></script>
     <script src="js/weather-time-panel.js?v=1.6"></script>
 </body>
 

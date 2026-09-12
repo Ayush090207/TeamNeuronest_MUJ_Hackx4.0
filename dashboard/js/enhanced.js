@@ -59,6 +59,61 @@ function classifyRiskLevel(waterDepth, elevation, config) {
 }
 
 // Generate text report for download
+/**
+ * Strips undefined/null/empty-string/empty-array values from a flat
+ * object. Used to build the structured data sent to the AI narrative
+ * endpoint: a field is only included if a real value actually exists for
+ * it, so the LLM never receives (and can't be tempted to "fill in") a
+ * placeholder for missing data - see llm_service.py's system prompt.
+ */
+function omitEmptyFields(obj) {
+    const result = {};
+    Object.entries(obj).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        if (typeof value === 'string' && value.trim() === '') return;
+        if (Array.isArray(value) && value.length === 0) return;
+        result[key] = value;
+    });
+    return result;
+}
+
+/**
+ * Builds the structured (real values only) payload sent to the AI
+ * narrative endpoint for a Flood Risk Report - the exact same source
+ * values generateTextReport() below formats into the .txt report, just as
+ * a plain object instead of pre-formatted text lines. Kept alongside the
+ * deterministic report (never replacing it) - see reports-store.js.
+ */
+function buildFloodRiskNarrationPayload(village) {
+    const config = SIMULATION_CONFIG[appState.currentVillageId] || {};
+    const stats = village?.stats || {};
+    const forecast = village?.forecast?.yearly?.yearly_summary || {};
+
+    const exposedPopulation = (typeof village?.info?.population === 'number' && typeof forecast.flood_probability === 'number')
+        ? Math.round(village.info.population * forecast.flood_probability)
+        : undefined;
+
+    return omitEmptyFields({
+        report_type: 'flood_risk',
+        village_name: village?.name,
+        district: village?.info?.district,
+        state: village?.info?.state,
+        terrain_type: config.name,
+        rainfall_mm: appState.rainfallAmount,
+        time_step: appState.currentTimeStep,
+        mean_elevation_m: typeof stats.elevation_mean === 'number' ? Math.round(stats.elevation_mean) : undefined,
+        max_slope_deg: typeof stats.slope_max === 'number' ? +stats.slope_max.toFixed(1) : undefined,
+        runoff_coefficient_pct: typeof stats.runoff_coefficient === 'number' ? +(stats.runoff_coefficient * 100).toFixed(1) : undefined,
+        risk_area_km2: typeof forecast.peak_risk_score === 'number' ? +(forecast.peak_risk_score * 3.2).toFixed(1) : undefined,
+        exposed_population: exposedPopulation,
+        flood_probability_pct: typeof forecast.flood_probability === 'number' ? Math.round(forecast.flood_probability * 100) : undefined,
+        peak_risk_month: forecast.peak_risk_month,
+        flood_characteristic: config.floodCharacteristic,
+        risk_factors: config.riskFactors,
+        evacuation_advice: config.evacuationAdvice
+    });
+}
+
 function generateTextReport(village) {
     const config = SIMULATION_CONFIG[appState.currentVillageId] || {};
     const stats = village?.stats || {};
@@ -591,7 +646,8 @@ function generateReport() {
                 title: `Flood Risk Report — ${village?.name || appState.currentVillageId}`,
                 villageId: appState.currentVillageId,
                 villageName: village?.name,
-                content: report
+                content: report,
+                structuredData: buildFloodRiskNarrationPayload(village)
             });
         }
 
@@ -4783,6 +4839,42 @@ function generateDeploymentReport() {
     add('  Priority Score Formula: (Population x Risk Weight x Model Confidence) / Travel Time');
     add('');
 
+    // Structured payload for the AI narrative endpoint - built from the same
+    // real values as the Executive Summary above, kept summary-scoped
+    // (top 3 zones, not all of them; aggregate resource coverage, not the
+    // full per-mission tables) both because a short narrative doesn't need
+    // the exhaustive detail and because sarvam-105b's reasoning-token cost
+    // scales with input size (see llm_service.py). The full detailed report
+    // this payload summarizes is unaffected and stored alongside it.
+    const resourceCoverage = allResKeys
+        .map(res => {
+            const alloc = plan.resource_allocations?.[res];
+            if (!alloc) return null;
+            return { resource: resLabels[res] || res, coverage_pct: alloc.percentage ?? 0 };
+        })
+        .filter(Boolean);
+
+    const deploymentNarrationPayload = omitEmptyFields({
+        report_type: 'deployment',
+        village_name: villageName,
+        terrain_label: profile.terrain_label,
+        flood_type: profile.flood_type,
+        rainfall_mm: plan.rainfall_mm,
+        risk_intensity_pct: typeof plan.intensity === 'number' ? Math.round(plan.intensity * 100) : undefined,
+        efficiency_pct: plan.efficiency_score,
+        zones_assessed: allMissions.length,
+        population_covered: totalPopulation,
+        top_priority_zones: allMissions.slice(0, 3).map(m => omitEmptyFields({
+            name: m.name,
+            risk_level: m.risk_level,
+            priority_score: m.priority_score,
+            population: m.pop,
+            eta_min: m.time_min
+        })),
+        resource_coverage: resourceCoverage,
+        top_recommendation: topRecommendation ? { type: topRecommendation.type, message: topRecommendation.message } : undefined
+    });
+
     // VILLAGE PROFILE
     add(dash);
     add('  SECTION 1: VILLAGE TERRAIN PROFILE');
@@ -4934,7 +5026,8 @@ function generateDeploymentReport() {
             title: `Tactical Deployment Report — ${villageName}`,
             villageId: plan.village_id,
             villageName: villageName,
-            content: reportText
+            content: reportText,
+            structuredData: deploymentNarrationPayload
         });
     }
 

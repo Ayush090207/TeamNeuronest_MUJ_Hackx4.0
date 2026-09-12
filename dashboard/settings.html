@@ -8,7 +8,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;600&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="css/styles.css?v=4.1">
+    <link rel="stylesheet" href="css/styles.css?v=4.2">
 </head>
 
 <body class="settings-page">
@@ -67,9 +67,28 @@
 
                 <div id="reportsList" class="reports-list"></div>
 
-                <button id="btnListenToReport" class="action-btn listen-btn" disabled style="margin-top:14px;">
-                    ▶ Listen to Report
-                </button>
+                <div class="reports-actions-row">
+                    <button id="btnListenToReport" class="action-btn listen-btn" disabled>
+                        ▶ Listen to Report
+                    </button>
+                    <button id="btnGenerateNarrative" class="action-btn narrative-btn" disabled>
+                        ✨ Generate AI Narrative
+                    </button>
+                </div>
+
+                <!-- AI Narrative panel - only shown once a narrative has been
+                     generated for the selected report. The original
+                     deterministic report (above) is never replaced by this. -->
+                <div id="narrativePanel" class="narrative-panel" hidden>
+                    <div class="narrative-panel-header">
+                        <span>✨ AI Narrative <span id="narrativeModelBadge" class="narrative-model-badge"></span></span>
+                        <button id="btnListenToNarrative" class="action-btn listen-btn" style="width:auto; padding:6px 12px; font-size:0.65rem;">
+                            🔊 Listen
+                        </button>
+                    </div>
+                    <div id="narrativeValidationWarning" class="narrative-warning" hidden></div>
+                    <p id="narrativeText" class="narrative-text"></p>
+                </div>
             </div>
         </div>
     </div>
@@ -78,7 +97,8 @@
     <script src="js/voice-settings.js?v=1.0"></script>
     <script src="js/reports-store.js?v=1.0"></script>
     <script src="js/voice-service.js?v=1.0"></script>
-    <script src="js/settings-page.js?v=1.1"></script>
+    <script src="js/narrative-service.js?v=1.0"></script>
+    <script src="js/settings-page.js?v=1.2"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             JalDrishtiNav.renderNav('#main-nav-links', 'settings');

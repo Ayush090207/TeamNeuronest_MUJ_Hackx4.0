@@ -11,7 +11,7 @@ Usage:
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 import logging
 
 from .config import API_CONFIG, VILLAGES, SIMULATION, SARVAM_SUPPORTED_LANGUAGES
@@ -20,6 +20,7 @@ from .flood_model import FloodSimulationModel
 from .resource_allocator import ResourceAllocator
 from .rescue_path import RescuePathFinder
 from .sarvam_service import SarvamService, SarvamConfigError, SarvamAPIError, SUPPORTED_LANGUAGE_CODES
+from .llm_service import SarvamLLMService, LLMConfigError, LLMAPIError
 
 # =============================================
 # App Initialization
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 data_pipeline = DataIngestionPipeline("dashboard/data")
 flood_model = FloodSimulationModel()
 sarvam_service = SarvamService()
+llm_service = SarvamLLMService()
 
 # =============================================
 # Request/Response Models
@@ -92,6 +94,14 @@ class HealthResponse(BaseModel):
 class VoiceSpeakRequest(BaseModel):
     text: str = Field(..., min_length=1, description="Source text (always English) to speak")
     language_code: str = Field("en-IN", description="Target Sarvam language code, e.g. hi-IN")
+
+
+class ReportNarrateRequest(BaseModel):
+    data: Dict[str, Any] = Field(
+        ...,
+        description="Structured, already-computed report data (no free text) - "
+                    "only real fields the frontend actually has for this report."
+    )
 
 
 # =============================================
@@ -287,6 +297,34 @@ async def voice_speak(request: VoiceSpeakRequest):
     except Exception as e:
         logger.exception("Unexpected error in voice_speak")
         raise HTTPException(status_code=500, detail=f"Voice synthesis failed: {e}")
+
+
+@app.post("/api/report/narrate")
+async def narrate_report(request: ReportNarrateRequest):
+    """
+    Turns an already-computed, structured report (built by the frontend
+    from the same real values used in the deterministic .txt report - see
+    enhanced.js) into a narrative via Sarvam's chat model. Never a data
+    source itself: the caller must only send real fields it actually has,
+    and the response includes a best-effort check for any number in the
+    narrative that doesn't trace back to the input data.
+    """
+    if not request.data:
+        raise HTTPException(status_code=400, detail="No structured report data provided.")
+
+    try:
+        result = await llm_service.narrate(request.data)
+        return result
+    except LLMConfigError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except LLMAPIError as e:
+        logger.error(f"Sarvam LLM error: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected error in narrate_report")
+        raise HTTPException(status_code=500, detail=f"Narrative generation failed: {e}")
 
 
 # =============================================

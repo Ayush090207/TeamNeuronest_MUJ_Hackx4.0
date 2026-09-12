@@ -87,6 +87,7 @@
         const listEl = document.getElementById('reportsList');
         const emptyEl = document.getElementById('reportsEmptyState');
         const listenBtn = document.getElementById('btnListenToReport');
+        const narrativeBtn = document.getElementById('btnGenerateNarrative');
         if (!listEl) return;
 
         const reports = window.ReportsStore.getAllReports();
@@ -95,7 +96,9 @@
             listEl.innerHTML = '';
             if (emptyEl) emptyEl.hidden = false;
             if (listenBtn) listenBtn.disabled = true;
+            if (narrativeBtn) narrativeBtn.disabled = true;
             selectedReportId = null;
+            renderNarrativePanel(null);
             return;
         }
 
@@ -120,7 +123,46 @@
             });
         });
 
+        const selectedReport = reports.find(r => r.id === selectedReportId);
         if (listenBtn) listenBtn.disabled = false;
+        if (narrativeBtn) {
+            // Only reports saved with a structured payload can be narrated -
+            // older reports from before this feature won't have one.
+            narrativeBtn.disabled = !selectedReport?.structuredData;
+            narrativeBtn.textContent = selectedReport?.narrative ? '✨ Regenerate AI Narrative' : '✨ Generate AI Narrative';
+        }
+        renderNarrativePanel(selectedReport);
+    }
+
+    /**
+     * Shows the cached narrative (if any) for the given report, including
+     * the numeric-grounding validation warning when the backend flagged
+     * anything - see llm_service.py's _find_unsupported_numbers(). Hidden
+     * entirely if this report has no narrative yet.
+     */
+    function renderNarrativePanel(report) {
+        const panel = document.getElementById('narrativePanel');
+        if (!panel) return;
+
+        if (!report || !report.narrative) {
+            panel.hidden = true;
+            return;
+        }
+
+        panel.hidden = false;
+        document.getElementById('narrativeText').textContent = report.narrative;
+        document.getElementById('narrativeModelBadge').textContent = report.narrativeModel ? `(${report.narrativeModel})` : '';
+
+        const warningEl = document.getElementById('narrativeValidationWarning');
+        const flagged = report.narrativeValidation?.flagged_numbers || [];
+        if (!report.narrativeValidation?.ok && flagged.length > 0) {
+            warningEl.hidden = false;
+            warningEl.textContent = `⚠ This AI narrative mentions ${flagged.length === 1 ? 'a number' : 'numbers'} ` +
+                `we couldn't verify against the source data (${flagged.join(', ')}). ` +
+                `The original report above is unaffected - verify this narrative before relying on it.`;
+        } else {
+            warningEl.hidden = true;
+        }
     }
 
     function escapeHtml(str) {
@@ -169,6 +211,49 @@
         });
     }
 
+    function bindListenToNarrativeButton() {
+        const btn = document.getElementById('btnListenToNarrative');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            if (!selectedReportId) return;
+            const report = window.ReportsStore.getReportById(selectedReportId);
+            if (!report?.narrative) return;
+            // The narrative is already plain prose (see llm_service.py's
+            // system prompt: "no markdown, no bullet symbols"), but run it
+            // through the same cleanup defensively in case a stray
+            // decoration character slips through.
+            window.JalDrishtiVoice.speak(prepareReportTextForSpeech(report.narrative));
+        });
+    }
+
+    function bindGenerateNarrativeButton() {
+        const btn = document.getElementById('btnGenerateNarrative');
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+            if (!selectedReportId) return;
+            const report = window.ReportsStore.getReportById(selectedReportId);
+            if (!report?.structuredData) return;
+
+            const originalLabel = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '✨ Generating…';
+
+            const result = await window.JalDrishtiNarrative.generateNarrative(report.structuredData);
+
+            btn.textContent = originalLabel;
+            btn.disabled = false;
+
+            if (!result) return; // narrative-service.js already showed an error toast
+
+            window.ReportsStore.updateReportNarrative(report.id, {
+                narrative: result.narrative,
+                validation: result.validation,
+                model: result.model
+            });
+            renderReportsList(); // re-renders the narrative panel with the new content
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         populateLanguageDropdown();
         bindLanguageSelect();
@@ -176,6 +261,8 @@
 
         renderReportsList();
         bindListenButton();
+        bindGenerateNarrativeButton();
+        bindListenToNarrativeButton();
 
         // Another tab/page generated a report while this page was open.
         document.addEventListener('jaldrishti:reports-changed', renderReportsList);

@@ -57,6 +57,10 @@
      * @param {string} report.title - real, human-readable title (e.g. village name + report type)
      * @param {string} report.villageId
      * @param {string} report.content - the actual, already-generated report text (verbatim)
+     * @param {Object} [report.structuredData] - the same real, already-computed values as
+     *   `content`, as a plain object rather than formatted text - this is what gets sent
+     *   to the AI narrative endpoint (see narrative-service.js). Optional: only reports
+     *   built with a structured payload can offer "Generate AI Narrative".
      */
     function saveReport(report) {
         if (!report || !report.content || !report.content.trim()) {
@@ -70,7 +74,14 @@
             villageId: report.villageId || null,
             villageName: report.villageName || null,
             createdAt: report.createdAt || new Date().toISOString(),
-            content: report.content
+            content: report.content,
+            structuredData: report.structuredData || null,
+            // Populated later by updateReportNarrative() once/if the user
+            // asks for an AI narrative - the original `content` above is
+            // never touched or replaced.
+            narrative: null,
+            narrativeValidation: null,
+            narrativeModel: null
         };
 
         const all = readAll();
@@ -89,5 +100,23 @@
         return readAll().find(r => r.id === id) || null;
     }
 
-    global.ReportsStore = { saveReport, getAllReports, getReportById };
+    /**
+     * Caches a generated AI narrative onto an existing report entry, so it
+     * doesn't have to be re-generated (and re-billed) every time the user
+     * revisits Settings. The original deterministic `content` is untouched -
+     * this only adds fields alongside it.
+     */
+    function updateReportNarrative(id, { narrative, validation, model }) {
+        const all = readAll();
+        const entry = all.find(r => r.id === id);
+        if (!entry) return null;
+        entry.narrative = narrative;
+        entry.narrativeValidation = validation || null;
+        entry.narrativeModel = model || null;
+        writeAll(all);
+        document.dispatchEvent(new CustomEvent('jaldrishti:reports-changed'));
+        return entry;
+    }
+
+    global.ReportsStore = { saveReport, getAllReports, getReportById, updateReportNarrative };
 })(window);

@@ -16,6 +16,7 @@ Bengali, Tamil, Telugu, Kannada, Malayalam, Marathi, Gujarati, Punjabi,
 and Odia - see SARVAM_SUPPORTED_LANGUAGES in config.py.
 """
 
+import asyncio
 import logging
 from typing import List
 
@@ -110,29 +111,34 @@ class SarvamService:
         if not chunks:
             return ""
 
-        translated_parts = []
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            for chunk in chunks:
-                resp = await client.post(
-                    f"{self.base_url}/translate",
-                    headers={
-                        "api-subscription-key": self.api_key,
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "input": chunk,
-                        "source_language_code": "en-IN",
-                        "target_language_code": target_language_code,
-                        "model": self.translate_model,
-                        "mode": "formal",
-                    },
+        async def translate_one(client: httpx.AsyncClient, chunk: str) -> str:
+            resp = await client.post(
+                f"{self.base_url}/translate",
+                headers={
+                    "api-subscription-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "input": chunk,
+                    "source_language_code": "en-IN",
+                    "target_language_code": target_language_code,
+                    "model": self.translate_model,
+                    "mode": "formal",
+                },
+            )
+            if resp.status_code != 200:
+                raise SarvamAPIError(
+                    f"Sarvam /translate failed ({resp.status_code}): {resp.text[:300]}"
                 )
-                if resp.status_code != 200:
-                    raise SarvamAPIError(
-                        f"Sarvam /translate failed ({resp.status_code}): {resp.text[:300]}"
-                    )
-                data = resp.json()
-                translated_parts.append(data.get("translated_text", ""))
+            return resp.json().get("translated_text", "")
+
+        # Chunks are independent - fire them concurrently rather than one at
+        # a time. A long report can be 10+ chunks; sequential awaits could
+        # take long enough to blow past a serverless platform's per-request
+        # time limit (e.g. Vercel's 10s Hobby-tier default). gather()
+        # preserves input order in its results, so playback order is intact.
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            translated_parts = await asyncio.gather(*(translate_one(client, c) for c in chunks))
 
         return " ".join(p for p in translated_parts if p)
 
@@ -147,29 +153,34 @@ class SarvamService:
         if not chunks:
             return []
 
-        audio_clips: List[str] = []
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            for chunk in chunks:
-                resp = await client.post(
-                    f"{self.base_url}/text-to-speech",
-                    headers={
-                        "api-subscription-key": self.api_key,
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "text": chunk,
-                        "language_code": language_code,
-                        "speaker": self.speaker,
-                        "model": self.tts_model,
-                    },
+        async def synthesize_one(client: httpx.AsyncClient, chunk: str) -> List[str]:
+            resp = await client.post(
+                f"{self.base_url}/text-to-speech",
+                headers={
+                    "api-subscription-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "text": chunk,
+                    "language_code": language_code,
+                    "speaker": self.speaker,
+                    "model": self.tts_model,
+                },
+            )
+            if resp.status_code != 200:
+                raise SarvamAPIError(
+                    f"Sarvam /text-to-speech failed ({resp.status_code}): {resp.text[:300]}"
                 )
-                if resp.status_code != 200:
-                    raise SarvamAPIError(
-                        f"Sarvam /text-to-speech failed ({resp.status_code}): {resp.text[:300]}"
-                    )
-                data = resp.json()
-                audio_clips.extend(data.get("audios", []))
+            return resp.json().get("audios", [])
 
+        # Same reasoning as translate(): run all chunk requests concurrently
+        # so total wall-clock time stays well under serverless timeouts.
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            results = await asyncio.gather(*(synthesize_one(client, c) for c in chunks))
+
+        audio_clips: List[str] = []
+        for clip_list in results:
+            audio_clips.extend(clip_list)
         return audio_clips
 
     async def speak(self, text: str, language_code: str) -> dict:

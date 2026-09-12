@@ -163,6 +163,9 @@ SARVAM_CONFIG = {
     # not arbitrary guesses. Text longer than these is chunked before sending.
     "tts_max_chars": 2500,
     "translate_max_chars": 1000,
+    # Chat model used only to turn already-computed report data into a
+    # narrative (src/llm_service.py) - never a data source itself.
+    "chat_model": os.getenv("SARVAM_CHAT_MODEL", "sarvam-105b"),
 }
 
 # Sarvam's actually-supported languages for both /translate (mayura:v1) and

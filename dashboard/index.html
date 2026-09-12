@@ -29,7 +29,7 @@
                 <div class="scan-line"></div>
             </div>
             <div class="nav-links" id="main-nav-links">
-                <a href="methodology.html" class="nav-link" id="link-methodology">Methodology</a>
+                <!-- Populated by nav.js: shows every other page's link, never the current one -->
             </div>
             <div class="system-status">
             </div>
@@ -51,7 +51,13 @@
                         <option value="dhemaji">Dhemaji (Assam)</option>
                     </select>
                 </div>
-                <div id="villageInfo" style="display:none;"><span>--</span></div>
+                <div id="villageInfo" style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px;">
+                    <span style="font-size:0.7rem; color:var(--text-muted);">--</span>
+                    <button id="btnGenerateReport" class="action-btn"
+                        style="width:auto; margin:0; padding:6px 12px; font-size:0.65rem; background:linear-gradient(135deg, rgba(34, 211, 238, 0.35) 0%, rgba(59, 130, 246, 0.25) 100%); border-color:rgba(34, 211, 238, 0.4);">
+                        📥 Download Report
+                    </button>
+                </div>
             </div>
 
             <!-- Current Weather Conditions -->
@@ -349,8 +355,17 @@
         }
     </style>
 
-    <script src="js/enhanced.js?v=3.6"></script>
+    <script src="js/nav.js?v=1.0"></script>
+    <script src="js/voice-settings.js?v=1.0"></script>
+    <script src="js/reports-store.js?v=1.0"></script>
+    <script src="js/voice-service.js?v=1.0"></script>
+    <script src="js/enhanced.js?v=3.8"></script>
     <script src="js/weather-time-panel.js?v=1.6"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            JalDrishtiNav.renderNav('#main-nav-links', 'dashboard');
+        });
+    </script>
 </body>
 
 </html>

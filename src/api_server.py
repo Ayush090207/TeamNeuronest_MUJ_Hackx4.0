@@ -14,11 +14,12 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 import logging
 
-from .config import API_CONFIG, VILLAGES, SIMULATION
+from .config import API_CONFIG, VILLAGES, SIMULATION, SARVAM_SUPPORTED_LANGUAGES
 from .data_ingestion import DataIngestionPipeline
 from .flood_model import FloodSimulationModel
 from .resource_allocator import ResourceAllocator
 from .rescue_path import RescuePathFinder
+from .sarvam_service import SarvamService, SarvamConfigError, SarvamAPIError, SUPPORTED_LANGUAGE_CODES
 
 # =============================================
 # App Initialization
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 # Initialize services
 data_pipeline = DataIngestionPipeline("dashboard/data")
 flood_model = FloodSimulationModel()
+sarvam_service = SarvamService()
 
 # =============================================
 # Request/Response Models
@@ -85,6 +87,11 @@ class HealthResponse(BaseModel):
     version: str
     villages_loaded: int
     data_complete: bool
+
+
+class VoiceSpeakRequest(BaseModel):
+    text: str = Field(..., min_length=1, description="Source text (always English) to speak")
+    language_code: str = Field("en-IN", description="Target Sarvam language code, e.g. hi-IN")
 
 
 # =============================================
@@ -232,6 +239,54 @@ async def get_population_clusters(village_id: str):
     """Get population cluster data for a village."""
     clusters = data_pipeline.load_population_clusters(village_id)
     return {"village_id": village_id, "clusters": clusters}
+
+
+# =============================================
+# Sarvam AI Voice Endpoints
+# =============================================
+# Single server-side gateway to Sarvam - the browser never holds the API
+# key. Frontend callers: dashboard/js/voice-service.js (report reading and
+# simulation-grid reading both go through this same route).
+
+@app.get("/api/voice/languages")
+async def get_voice_languages():
+    """Languages actually supported by the configured Sarvam models
+    (translate + text-to-speech) - the single source of truth for the
+    Settings page's language dropdown."""
+    return {"languages": SARVAM_SUPPORTED_LANGUAGES}
+
+
+@app.post("/api/voice/speak")
+async def voice_speak(request: VoiceSpeakRequest):
+    """
+    Translates (if needed) and synthesizes speech for arbitrary text -
+    used for both report reading and simulation-grid reading. The caller
+    is responsible for building `text` from real, already-existing data;
+    this route only handles the Sarvam pipeline.
+    """
+    if request.language_code not in SUPPORTED_LANGUAGE_CODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported language_code '{request.language_code}'. "
+                    f"Supported: {sorted(SUPPORTED_LANGUAGE_CODES)}",
+        )
+
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="No text provided to speak.")
+
+    try:
+        result = await sarvam_service.speak(text, request.language_code)
+        return result
+    except SarvamConfigError as e:
+        # Setup problem (missing API key), not a runtime failure.
+        raise HTTPException(status_code=503, detail=str(e))
+    except SarvamAPIError as e:
+        logger.error(f"Sarvam API error: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected error in voice_speak")
+        raise HTTPException(status_code=500, detail=f"Voice synthesis failed: {e}")
 
 
 # =============================================

@@ -70,7 +70,7 @@ function generateTextReport(village) {
         '═══════════════════════════════════════════════════════════════',
         '',
         `Generated: ${new Date().toLocaleString()}`,
-        `Location: ${village?.info?.name || 'Unknown'}, ${village?.info?.district || ''}, ${village?.info?.state || ''}`,
+        `Location: ${village?.name || 'Unknown'}, ${village?.info?.district || ''}, ${village?.info?.state || ''}`,
         `Terrain Type: ${config.name || 'Unknown'}`,
         '',
         '─── SIMULATION PARAMETERS ───────────────────────────────────────',
@@ -582,6 +582,18 @@ function generateReport() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+
+        // Record this exact, already-generated report so it shows up under
+        // Settings > Reports (does not change what's downloaded above).
+        if (window.ReportsStore) {
+            window.ReportsStore.saveReport({
+                type: 'flood_risk',
+                title: `Flood Risk Report — ${village?.name || appState.currentVillageId}`,
+                villageId: appState.currentVillageId,
+                villageName: village?.name,
+                content: report
+            });
+        }
 
         showToast('Report Generated', 'Flood risk report downloaded successfully', 'info');
     } catch (e) {
@@ -3735,6 +3747,69 @@ function handleDeepScan(feature, lngLat) {
             appState.map.setLayoutProperty('scan-highlight-layer', 'visibility', 'visible');
         }
     }
+
+    // Read the just-updated panel aloud via Sarvam AI, in the language
+    // selected in Settings. Built ONLY from the real values already computed
+    // above for this exact grid cell (elevation, depth, riskLevel, popAtRisk,
+    // config) - the same values just written into the panel - and only
+    // includes the optional risk-factors/evacuation parts when the panel
+    // itself is showing them (same conditions as above), so nothing is
+    // spoken that isn't also visible on screen.
+    if (window.JalDrishtiVoice) {
+        const includeRiskFactors = riskLevel !== 'low' && riskLevel !== 'safe';
+        const includeEvacuation = riskLevel === 'high' || riskLevel === 'extreme';
+        // Evacuation text is read straight from the panel element (rather
+        // than re-deriving it) so the spoken version always exactly matches
+        // what's on screen, urgency prefix and live population estimate
+        // included - it's the same computed string, just spoken too.
+        const evacuationText = includeEvacuation && evacuationEl ? evacuationEl.textContent.trim() : null;
+        const summary = buildGridSpeechSummary({
+            terrainName: config?.name,
+            elevation,
+            depth,
+            riskLevel,
+            popAtRisk,
+            riskFactors: includeRiskFactors ? config?.riskFactors : null,
+            evacuationAdvice: evacuationText
+        });
+        window.JalDrishtiVoice.speak(summary);
+    }
+}
+
+/**
+ * Dynamically builds a spoken summary from whichever real fields are
+ * actually provided - nothing here is a fixed template that assumes every
+ * field exists. Each field is only included if it's actually
+ * defined/non-empty; missing fields are simply skipped, never invented or
+ * replaced with a placeholder value.
+ */
+function buildGridSpeechSummary(fields) {
+    const parts = [];
+
+    if (fields.terrainName) {
+        parts.push(`Location: ${fields.terrainName}.`);
+    }
+    if (fields.riskLevel) {
+        parts.push(`Risk level: ${fields.riskLevel}.`);
+    }
+    if (typeof fields.elevation === 'number' && !isNaN(fields.elevation)) {
+        parts.push(`Elevation: ${Math.round(fields.elevation)} meters.`);
+    }
+    if (typeof fields.depth === 'number' && !isNaN(fields.depth)) {
+        parts.push(`Water depth: ${parseFloat(fields.depth).toFixed(1)} millimeters.`);
+    }
+    if (fields.popAtRisk && typeof fields.popAtRisk.count === 'number') {
+        const densityPart = fields.popAtRisk.density ? ` at ${fields.popAtRisk.density} density` : '';
+        parts.push(`Population at risk: ${fields.popAtRisk.count.toLocaleString()}${densityPart}.`);
+    }
+    if (fields.riskFactors && fields.riskFactors.length > 0) {
+        parts.push(`Risk factors: ${fields.riskFactors.join(', ')}.`);
+    }
+    if (fields.evacuationAdvice) {
+        parts.push(fields.evacuationAdvice);
+    }
+
+    return parts.join(' ');
 }
 
 /**
@@ -4678,6 +4753,36 @@ function generateDeploymentReport() {
     add(`Efficiency:      ${plan.efficiency_score || 0}%`);
     add('');
 
+    // EXECUTIVE SUMMARY - a short, speech-friendly digest built entirely from
+    // the same real plan data as the detailed sections below, so a listener
+    // (or a skimming reader) gets the headline picture before 20+ missions
+    // of detail. Priority Score formula is stated once here instead of on
+    // every mission entry further down.
+    const allMissions = plan.mission_summaries || [];
+    const totalPopulation = allMissions.reduce((s, m) => s + (m.pop || 0), 0);
+    const topMission = allMissions[0];
+    const topRecommendation = (plan.recommendations || []).find(r => r.type === 'CRITICAL')
+        || (plan.recommendations || []).find(r => r.type === 'WARNING')
+        || (plan.recommendations || [])[0];
+
+    add(dash);
+    add('  EXECUTIVE SUMMARY');
+    add(dash);
+    add('');
+    add(`  Zones Assessed:      ${allMissions.length}`);
+    add(`  Population Covered:  ${totalPopulation.toLocaleString()}`);
+    add(`  Overall Efficiency:  ${plan.efficiency_score || 0}%`);
+    if (topMission) {
+        add(`  Highest Priority:    ${topMission.name} (${(topMission.risk_level || '').toUpperCase()}, ` +
+            `Priority Score ${(topMission.priority_score || 0).toLocaleString()}, ` +
+            `Pop. ${(topMission.pop || 0).toLocaleString()}, ETA ${topMission.time_min || '--'} min)`);
+    }
+    if (topRecommendation) {
+        add(`  Top Recommendation:  [${topRecommendation.type}] ${topRecommendation.message}`);
+    }
+    add('  Priority Score Formula: (Population x Risk Weight x Model Confidence) / Travel Time');
+    add('');
+
     // VILLAGE PROFILE
     add(dash);
     add('  SECTION 1: VILLAGE TERRAIN PROFILE');
@@ -4721,22 +4826,30 @@ function generateDeploymentReport() {
     add('');
 
     // CLUSTER-WISE ALLOCATION TABLE
+    // Full per-mission detail is capped to the top MAX_DETAILED_MISSIONS by
+    // priority_score (mission_summaries is already ranked that way) - the
+    // same cap used for the map's deployment markers, so the report and the
+    // map agree on which zones are "the ones that matter most". The rest
+    // still appear, just in the compact one-line form under Section 5.
     add(dash);
-    add('  SECTION 4: CLUSTER-WISE RESOURCE ALLOCATION');
+    add('  SECTION 4: CLUSTER-WISE RESOURCE ALLOCATION (TOP PRIORITY ZONES)');
     add(dash);
     add('');
     const missions = plan.mission_summaries || [];
+    const MAX_DETAILED_MISSIONS = 6;
+    const detailedMissions = missions.slice(0, MAX_DETAILED_MISSIONS);
+    const remainingCount = missions.length - detailedMissions.length;
     if (missions.length === 0) {
         add('  No active mission clusters detected.');
     } else {
-        missions.forEach((m, i) => {
+        detailedMissions.forEach((m, i) => {
             const riskLabel = (m.risk_level || 'low').toUpperCase();
             add(`  ── Mission ${i + 1}: ${m.name} ──`);
             add(`     Phase:        ${m.phase || '--'}`);
             add(`     Urgency:      ${m.urgency || '--'}`);
             add(`     Risk Level:   ${riskLabel} (${(m.risk * 100).toFixed(0)}%, weight ${m.risk_weight || '-'}x)`);
             add(`     Model Confidence: ${((m.model_confidence || 0) * 100).toFixed(1)}%`);
-            add(`     Priority Score:   ${(m.priority_score || 0).toLocaleString()}  [ (Pop x RiskWeight x Confidence) / ETA ]`);
+            add(`     Priority Score:   ${(m.priority_score || 0).toLocaleString()}`);
             add(`     Population:   ${(m.pop || 0).toLocaleString()}`);
             add(`     Staging Hub:  ${m.hub_name || '--'}`);
             add(`     ETA:          ${m.time_min || '--'} minutes`);
@@ -4751,6 +4864,10 @@ function generateDeploymentReport() {
             });
             add('');
         });
+        if (remainingCount > 0) {
+            add(`  + ${remainingCount} additional lower-priority zone${remainingCount === 1 ? '' : 's'} - see Section 5 (Phased Deployment Schedule) for the full list.`);
+            add('');
+        }
     }
 
     // PHASED DEPLOYMENT SCHEDULE
@@ -4808,6 +4925,18 @@ function generateDeploymentReport() {
     a.download = `JalDrishti_DeploymentReport_${plan.village_id}_${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
+
+    // Record this exact, already-generated report so it shows up under
+    // Settings > Reports (does not change what's downloaded above).
+    if (window.ReportsStore) {
+        window.ReportsStore.saveReport({
+            type: 'deployment',
+            title: `Tactical Deployment Report — ${villageName}`,
+            villageId: plan.village_id,
+            villageName: villageName,
+            content: reportText
+        });
+    }
 
     showToast('Deployment Report Downloaded', `Tactical report for ${villageName} saved successfully.`, 'success');
 }

@@ -10,4 +10,5 @@ brain/
 .DS_Store
 Thumbs.db
 .claude/
+.env
 .env*.local

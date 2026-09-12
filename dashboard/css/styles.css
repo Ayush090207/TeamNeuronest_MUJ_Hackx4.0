@@ -1832,3 +1832,180 @@ body {
     padding: 1px 6px;
     white-space: nowrap;
 }
+
+/* ============================================
+   Settings Page
+   ============================================ */
+body.settings-page {
+    overflow-y: auto;
+}
+
+.settings-hud-container {
+    position: relative;
+    min-height: 100vh;
+    align-items: stretch;
+}
+
+.settings-content {
+    max-width: 720px;
+    width: 100%;
+    margin: 12px auto 60px;
+    padding: 0 20px;
+}
+
+.settings-title {
+    font-family: var(--font-tech);
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 10px 0 4px;
+}
+
+.settings-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0 0 24px;
+}
+
+.settings-section {
+    margin-bottom: 20px;
+}
+
+.settings-help-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0 0 14px;
+}
+
+.settings-label {
+    display: block;
+    font-family: var(--font-tech);
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+/* Generic select styling, matching #villageSelector's look */
+.jd-select {
+    background: rgba(15, 23, 42, 0.6);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 8px;
+    width: 100%;
+    font-size: 0.9rem;
+    outline: none;
+    transition: all 0.2s;
+    font-family: var(--font-ui);
+}
+
+.jd-select:focus {
+    border-color: var(--accent-secondary);
+    box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2);
+}
+
+.jd-select option {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
+.reports-empty-state {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 24px 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+.reports-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.report-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    width: 100%;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.2s var(--transition-smooth);
+    font-family: var(--font-ui);
+}
+
+.report-item:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.25);
+}
+
+.report-item.selected {
+    background: rgba(139, 92, 246, 0.12);
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2);
+}
+
+.report-item-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.report-item-meta {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+}
+
+.listen-btn {
+    width: 100%;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.4) 0%, rgba(139, 92, 246, 0.2) 100%);
+    border-color: rgba(139, 92, 246, 0.5);
+}
+
+/* ============================================
+   Sarvam Voice Indicator
+   Small, unobtrusive pill shown only while voice is generating/playing -
+   used on the Dashboard (grid reading) and Settings (report reading).
+   ============================================ */
+.jd-voice-indicator {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(17, 24, 39, 0.92);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    color: var(--text-primary);
+    font-family: var(--font-tech);
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 20px rgba(139, 92, 246, 0.15);
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.jd-voice-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-tertiary);
+    box-shadow: 0 0 8px var(--accent-tertiary);
+    animation: live-pulse 1.2s infinite;
+}

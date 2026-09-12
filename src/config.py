@@ -6,6 +6,14 @@ Central configuration for all backend services, paths, and constants.
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Loads .env (if present) into the process environment *before* any of the
+# os.getenv() calls below run - this is what makes "copy .env.example to
+# .env and fill in your key" actually work. Previously nothing in this app
+# loaded .env automatically, so a real key pasted there was silently
+# ignored unless exported in the shell by hand.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # =============================================
 # Path Configuration
@@ -135,6 +143,45 @@ MODEL_CONFIG = {
         "min_samples": 10,
     },
 }
+
+# =============================================
+# Sarvam AI Voice Configuration
+# =============================================
+# Credentials are read from the environment only - never hardcode a real key
+# here. Copy .env.example to .env and set SARVAM_API_KEY, or export it in
+# your shell/deployment environment. See src/sarvam_service.py for the
+# client that uses this config.
+SARVAM_CONFIG = {
+    "api_key": os.getenv("SARVAM_API_KEY", ""),
+    "base_url": os.getenv("SARVAM_BASE_URL", "https://api.sarvam.ai"),
+    "tts_model": os.getenv("SARVAM_TTS_MODEL", "bulbul:v3"),
+    "translate_model": os.getenv("SARVAM_TRANSLATE_MODEL", "mayura:v1"),
+    # Sarvam speaker names are lowercase (verified live against the API -
+    # "Shubh" 400s, "shubh" works).
+    "tts_speaker": os.getenv("SARVAM_TTS_SPEAKER", "shubh"),
+    # Real limits from Sarvam's documented API (bulbul:v3 / mayura:v1) -
+    # not arbitrary guesses. Text longer than these is chunked before sending.
+    "tts_max_chars": 2500,
+    "translate_max_chars": 1000,
+}
+
+# Sarvam's actually-supported languages for both /translate (mayura:v1) and
+# /text-to-speech (bulbul:v3) - the intersection of the two, since a voice
+# selection must work for both pipelines. Do not add a language here unless
+# it is confirmed supported by both Sarvam endpoints.
+SARVAM_SUPPORTED_LANGUAGES = [
+    {"code": "en-IN", "label": "English (India)"},
+    {"code": "hi-IN", "label": "Hindi"},
+    {"code": "bn-IN", "label": "Bengali"},
+    {"code": "ta-IN", "label": "Tamil"},
+    {"code": "te-IN", "label": "Telugu"},
+    {"code": "kn-IN", "label": "Kannada"},
+    {"code": "ml-IN", "label": "Malayalam"},
+    {"code": "mr-IN", "label": "Marathi"},
+    {"code": "gu-IN", "label": "Gujarati"},
+    {"code": "pa-IN", "label": "Punjabi"},
+    {"code": "od-IN", "label": "Odia"},
+]
 
 # =============================================
 # Logging

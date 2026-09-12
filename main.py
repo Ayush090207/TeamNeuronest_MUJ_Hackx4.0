@@ -31,6 +31,10 @@ assets_dir = DASHBOARD_DIR / "assets"
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
+# Mount full dashboard directory for /dashboard URLs
+app.mount("/dashboard", StaticFiles(directory=DASHBOARD_DIR, html=True), name="dashboard")
+
+ROOT_DIR = Path(__file__).resolve().parent
 
 # =============================================
 # HTML Page Routes
@@ -48,3 +52,27 @@ async def serve_dashboard():
 async def serve_methodology():
     """Serve the methodology page."""
     return FileResponse(DASHBOARD_DIR / "methodology.html")
+
+
+@app.get("/settings", include_in_schema=False)
+@app.get("/settings.html", include_in_schema=False)
+async def serve_settings():
+    """Serve the settings page (voice language + reports)."""
+    return FileResponse(DASHBOARD_DIR / "settings.html")
+
+
+@app.get("/judge", include_in_schema=False)
+@app.get("/judge.html", include_in_schema=False)
+@app.get("/jal_drishti_judge_viz.html", include_in_schema=False)
+async def serve_judge():
+    """Serve the judge evaluation interface."""
+    return FileResponse(ROOT_DIR / "jal_drishti_judge_viz.html")
+
+
+@app.get("/pipeline", include_in_schema=False)
+@app.get("/pipeline.html", include_in_schema=False)
+@app.get("/jal_drishti_final_pipeline.html", include_in_schema=False)
+async def serve_pipeline():
+    """Serve the architecture pipeline diagram."""
+    return FileResponse(ROOT_DIR / "jal_drishti_final_pipeline.html")
+
